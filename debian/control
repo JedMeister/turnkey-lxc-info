@@ -1,0 +1,14 @@
+Source: turnkey-lxc-info
+Section: misc
+Priority: optional
+Maintainer: Jeremy Davis <jeremy@turnkeylinux.org>
+Build-Depends:
+ debhelper (>= 10),
+Standards-Version: 4.0.0
+
+Package: turnkey-lxc-info
+Architecture: any
+Depends:
+ systemd,
+ ${misc:Depends},
+Description: Simple LXC container tool to check priviledged/unpriveledged/nested

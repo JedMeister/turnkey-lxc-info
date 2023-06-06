@@ -1,0 +1,89 @@
+#!/bin/bash -e
+
+usage() {
+    if [[ "$#" -ne 0 ]]; then
+        echo "Error $@"
+        exit_code=1
+    else
+        exit_code=0
+    fi
+    cat <<EOF
+Syntax: $(basename "$0") [-h] [-p|-u|-n]
+
+Probes system for LXC priviledge level.
+
+If not LXC will exit 1 with error message on stderr.
+
+With no switch, it will output one of the following:
+
+    privileged      - if container is privileged
+    unprivileged    - if container is unprivileged
+    nested          - if container is unprivileged AND nested
+
+If switch is used, then there will be no text output on stdout (stderr
+if any errors), exit code will be as noted below.
+
+Options:
+    -h|--help       - Show this help and exit
+    -p|--is-priv    - exit 0 if privileged; otherwise 1
+    -u|--is-unpriv  - exit 0 if unprivileged (inc nested)
+    -n|--is-nested  - exit 0 if nested
+EOF
+    exit $exit_code
+}
+
+warning() { echo "WARN: $@" >&2; }
+fatal() { echo "FATAL: $@" >&2; exit 1; }
+
+check_nesting() {
+    if [[ -d "/dev/.lxc/proc" ]]; then
+        echo "nested"
+    else
+        echo "unprivileged"
+    fi
+}
+
+check_priv() {
+    proc_owner=$(stat -c "%U" /proc)
+    case $proc_owner in
+        root)
+            echo "privileged";;
+        nobody)
+            check_nesting;;
+        *)
+            fatal "unexpected status - /proc owned by neither root or nobody";;
+    esac
+}
+
+[[ "$EUID" == 0 ]] || warning "Not running as root so results may be unreliable"
+which systemd-detect-virt >/dev/null 2>&1 || fatal "systemd-detect-virt command not found"
+[[ "$(systemd-detect-virt)" == 'lxc' ]] || fatal "System is not LXC"
+! systemd-detect-virt --chroot || fatal "Running in a chroot"
+[[ "$#" -le 1 ]] || usage "$(basename $0) only accepts one option"
+
+status=$(check_priv)
+case $1 in
+    "")
+        echo "$status"
+        exit 0;;
+    -h|--help)
+        usage;;
+    -p|--is-priv)
+        check="privileged";;
+    -u|--is-unpriv)
+        check="unprivileged";;
+    -n|--is-nested)
+        check="nested";;
+    -*)
+        usage "Unknown switch: $1";;
+    *)
+        usage "Unexpected argument: $1";;
+esac
+
+if [[ "$check" == "$status" ]]; then
+    exit 0
+elif [[ "$status" == "nested" ]] && [[ "$check" == "unprivileged" ]]; then
+    exit 0
+else
+    exit 1
+fi
